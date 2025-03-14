@@ -1,138 +1,121 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 14 11:46:15 2025
-
-@author: jveraz
+App de Streamlit para Conversión Archivística
 """
 
-# -*- coding: utf-8 -*-
-"""
-App de Streamlit para Conversión Archivística - Versión Cloud
-"""
+import streamlit as st
+import pandas as pd
+import os
+import io
+from dotenv import load_dotenv
 
-import streamlit as st  # Framework principal
+import sys
+sys.path.append(os.path.dirname(__file__))
+
+from ira_atom_v2 import ISADConverter  # Asumiendo que el código está en isad_converter.py
+
+# Cargar variables de entorno
+load_dotenv()
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 
 # Configuración inicial
-st.set_page_config(
-    page_title="Conversor ISAD(G)", 
-    page_icon="📚",
-    layout="wide",
-    menu_items={
-        'About': "Herramienta desarrollada para el Archivo Histórico Riva-Agüero PUCP"
-    }
-)
+st.set_page_config(page_title="Conversor ISAD(G)", page_icon="📚", layout="wide")
 
-import pandas as pd     # Manipulación de datos
-import os               # Manejo de sistema de archivos
-import io               # Manejo de buffers de memoria
-import tempfile         # Directorios temporales
-from ira_atom_v2 import ISADConverter  # Lógica de conversión
-from langchain_huggingface import HuggingFaceEndpoint
-from langchain.schema import HumanMessage
+# Título de la aplicación
+st.title("🖋️ Conversor de Documentos Archivísticos a ISAD(G)")
+st.markdown("---")
+st.write("🔍 Depuración: La aplicación ha cargado hasta aquí correctamente.")
 
-
-
-def main():
-    # Título de la aplicación
-    st.title("🖋️ Conversor de Documentos Archivísticos a ISAD(G)")
+# Sidebar para configuración
+with st.sidebar:
+    st.header("Configuración")
+    if HF_API_TOKEN:
+        st.success("Token de Hugging Face cargado correctamente desde el entorno.")
+    else:
+        st.error("No se encontró el token de Hugging Face en el entorno. Verifica tu configuración.")
     st.markdown("---")
+    st.info("Sube tu archivo CSV y descarga los formatos ISAD(G) listos para importar.")
 
-    # Sidebar para configuración
-    with st.sidebar:
-        st.header("⚙️ Configuración")
-        
-        # Manejo del token en cloud y local
-        if 'HF_API_TOKEN' in st.secrets:
-            hf_token = st.secrets.HF_API_TOKEN
-            st.success("Token de Hugging Face detectado")
-        else:
-            hf_token = st.text_input("Ingrese su Token de Hugging Face", type="password")
-            st.markdown("[Obtener token](https://huggingface.co/settings/tokens)")
-        
-        st.markdown("---")
-        st.info("""
-        **Instrucciones:**
-        1. Sube tu archivo CSV
-        2. Espera el procesamiento
-        3. Descarga los resultados
-        """)
+# Componente principal
+uploaded_file = st.file_uploader("Sube tu archivo CSV", type=["csv"])
 
-    # Componente principal
-    uploaded_file = st.file_uploader("Sube tu archivo CSV", type=["csv"])
-
-    if uploaded_file and hf_token:
-        os.environ["HF_API_TOKEN"] = hf_token
-        
+if uploaded_file:
+    converter = ISADConverter()
+    
+    # Procesamiento de datos
+    with st.spinner("Procesando archivo..."):
         try:
-            converter = ISADConverter()
+            # Crear directorio temporal
+            temp_dir = "temp_results"
+            os.makedirs(temp_dir, exist_ok=True)
+            output_base = os.path.join(temp_dir, "resultado_isad")
             
-            with st.spinner("Procesando con IA..."):
-                # Usar archivos temporales en memoria
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    # Procesar desde memoria
-                    input_path = os.path.join(tmp_dir, "input.csv")
-                    with open(input_path, "wb") as f:
-                        f.write(uploaded_file.getvalue())
-                    
-                    output_base = os.path.join(tmp_dir, "output")
-                    
-                    if converter.process(input_path, output_base):
-                        # Leer resultados
-                        csv_path = f"{output_base}.csv"
-                        excel_path = f"{output_base}.xlsx"
-                        
-                        # Mostrar vista previa
-                        st.subheader("📄 Vista Previa de los Resultados")
-                        preview_df = pd.read_csv(csv_path)
-                        st.dataframe(preview_df.head(), use_container_width=True)
-                        
-                        # Botones de descarga
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:  # CSV
-                            with open(csv_path, "rb") as f:
-                                st.download_button(
-                                    label="⬇️ Descargar CSV",
-                                    data=f.read(),
-                                    file_name="resultados_isad.csv",
-                                    mime="text/csv"
-                                )
-                        
-                        with col2:  # Excel
-                            with open(excel_path, "rb") as f:
-                                st.download_button(
-                                    label="⬇️ Descargar Excel",
-                                    data=f.read(),
-                                    file_name="resultados_isad.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                    
-                    else:
-                        st.error("Error en el procesamiento. Verifica el formato del archivo.")
-        
+            # Guardar archivo temporal
+            with open(os.path.join(temp_dir, "temp_input.csv"), "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            # Ejecutar conversión
+            if converter.process(os.path.join(temp_dir, "temp_input.csv"), output_base):
+                # Leer resultados
+                result_csv = pd.read_csv(f"{output_base}.csv")
+                result_excel = pd.read_excel(f"{output_base}.xlsx")
+                
+                # Mostrar vista previa
+                st.subheader("Vista Previa de los Datos Convertidos")
+                st.dataframe(result_csv.head(), use_container_width=True)
+                
+                # Botones de descarga
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    csv_buffer = io.StringIO()
+                    result_csv.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        label="Descargar CSV ISAD(G)",
+                        data=csv_buffer.getvalue(),
+                        file_name="resultado_isad.csv",
+                        mime="text/csv"
+                    )
+                
+                with col2:
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        result_excel.to_excel(writer, index=False)
+                    st.download_button(
+                        label="Descargar Excel ISAD(G)",
+                        data=excel_buffer.getvalue(),
+                        file_name="resultado_isad.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                
+                # Limpieza de archivos temporales
+                os.remove(f"{output_base}.csv")
+                os.remove(f"{output_base}.xlsx")
+                os.remove(os.path.join(temp_dir, "temp_input.csv"))
+                
+            else:
+                st.error("Error en el procesamiento. Verifica el formato del archivo.")
+                
         except Exception as e:
-            st.error(f"🚨 Error crítico: {str(e)}")
+            st.error(f"Error crítico: {str(e)}")
             st.stop()
 
-    else:
-        # Mensaje inicial
-        st.markdown("""
-        ### 📋 Formato Requerido
-        Tu CSV debe contener estas columnas:
-        - `Signatura` (requerido)
-        - `Fecha cronica` (formato flexible)
-        - `Institucion`  
-        - `Categoria`  
-        - `Pais`  
-        - `Observaciones`
-        
-        ---
-        ### 🛠️ Características
-        - Conversión automática a estándar ISAD(G)
-        - Mejora de metadatos con IA
-        - Generación de CSV y Excel
-        - Compatible con documentos históricos
-        """)
+# Mensaje de instrucciones
+else:
+    st.markdown("""
+    ### Instrucciones de Uso:
+    1. **Sube tu archivo CSV** con los documentos archivísticos
+    2. Espera a que se complete el procesamiento (¡usamos IA para mejorar los metadatos!)
+    3. **Descarga los resultados** en formato CSV o Excel listos para importar
+    4. 🚀 ¡Listo para preservar tu patrimonio documental!
+    
+    ---
+    **Formato CSV Requerido:**
+    - Debe contener columnas: `Signatura`, `Fecha cronica`, `Institucion`, etc.
+    - Codificación: UTF-8
+    - Separador: Comas
+    """)
 
-if __name__ == "__main__":
-    main()
+# Notas técnicas
+st.markdown("---")
+st.caption("v1.0 - Herramienta desarrollada para el Archivo Histórico Riva-Agüero PUCP")
