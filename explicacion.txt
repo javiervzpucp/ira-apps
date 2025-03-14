@@ -1,0 +1,97 @@
+### 🧠 **Funcionamiento Detallado de la Aplicación y Uso de IA**
+
+---
+
+#### **1. Estructura General de la App**  
+La aplicación es un **conversor archivístico** que transforma metadatos de documentos históricos en formato CSV al estándar ISAD(G), utilizando IA para mejorar la calidad de los datos. Su flujo es:
+
+1. **Interfaz de Usuario (Streamlit):**  
+   - Subida de CSV.
+   - Configuración del token de Hugging Face.
+   - Visualización de resultados y descarga de archivos procesados.
+
+2. **Lógica de Procesamiento (`ISADConverter`):**  
+   - Normalización de datos.
+   - Mejora de metadatos con IA (títulos y fechas).
+   - Generación de archivos CSV/Excel.
+
+---
+
+#### **2. Procesamiento con IA: Clase `ISADConverter`**  
+
+##### **Componentes Clave**  
+| Método/Función                | Descripción                                                                                     | Uso de IA                                                                 |
+|--------------------------------|-------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `_normalize_column_names()`    | Estandariza nombres de columnas (ej: `Signatura` → `referenceCode`).                           | ❌                                                                        |
+| `_normalize_date_with_ai()`    | Convierte fechas ambiguas a formato ISO 8601 usando Mixtral-8x7B.                              | ✅ **Prompt ejemplo:**<br>*"Convierte 'Enero de 1890' a ISO 8601: [RESPUESTA]"* |
+| `_generate_title_with_ai()`    | Genera títulos formales para documentos usando contexto (institución, categoría, país).        | ✅ **Prompt ejemplo:**<br>*"Genera título usando: Institución: Municipalidad de Lima..."* |
+| `process()`                    | Orquesta todo el proceso: carga CSV, aplica transformaciones, guarda resultados.               | ❌ (Coordina el uso de IA en otros métodos)                                |
+
+---
+
+#### **3. Flujo de Datos con IA**  
+**Paso a Paso:**  
+1. **Entrada:** CSV con columnas como `Signatura`, `Fecha cronica`, `Institucion`, etc.  
+2. **Normalización Inicial:**  
+   - Columnas renombradas a estándar ISAD(G) (ej: `title`, `date`).  
+   - Fechas parseadas automáticamente si son simples (ej: `1890` → `1890-01-01`).  
+3. **IA para Casos Complejos:**  
+   - **Fechas no estándar:**  
+     - Si el parseo falla, se envía la fecha original a Mixtral-8x7B.  
+     - **Ejemplo:**  
+       - Entrada: `"Verano de 1925"` → IA → `"1925-06-01"`.  
+   - **Títulos ausentes o genéricos:**  
+     - Se genera un título descriptivo usando datos de la fila.  
+     - **Ejemplo:**  
+       - Entrada: `Institucion: "Archivo Nacional", Categoria: "Correspondencia"` → IA → `"Correspondencia administrativa del Archivo Nacional (1925)"`.  
+4. **Salida:**  
+   - CSV/Excel con metadatos mejorados y normalizados según ISAD(G).  
+
+---
+
+#### **4. Tecnologías y Modelos de IA**  
+- **Modelo Utilizado:** `mistralai/Mixtral-8x7B-Instruct-v0.1` (Hugging Face).  
+- **Integración:**  
+  - Se accede via `HuggingFaceEndpoint` de LangChain.  
+  - **Prompt Engineering:** Instrucciones específicas en español para garantizar respuestas estructuradas.  
+- **Configuración:**  
+  - `temperature=0.3`: Balance entre creatividad y precisión.  
+  - `max_new_tokens=150`: Limita respuestas largas para mantener relevancia.  
+
+---
+
+#### **5. Ejemplo de Procesamiento**  
+**Entrada (CSV original):**  
+| Signatura | Fecha cronica   | Institucion         | Categoria       |  
+|-----------|-----------------|---------------------|-----------------|  
+| AH-001    | Febrero 1901    | Municipalidad Lima  | Cartas oficiales|  
+
+**Procesamiento:**  
+1. Normalización de columnas → `referenceCode`, `date`, `title`, `scopeAndContent`.  
+2. IA mejora `date`: `"Febrero 1901"` → `"1901-02-01"`.  
+3. IA genera `title`: `"Cartas oficiales de la Municipalidad de Lima (1901)"`.  
+
+**Salida (CSV ISAD(G)):**  
+| referenceCode | date       | title                                      | scopeAndContent     |  
+|---------------|------------|--------------------------------------------|---------------------|  
+| AH-001        | 1901-02-01 | Cartas oficiales de la Municipalidad de Lima | Documentos administrativos |  
+
+---
+
+#### **6. Dependencias Críticas**  
+- **Streamlit:** Interfaz web.  
+- **LangChain/HuggingFace:** Integración con modelos de IA.  
+- **Pandas:** Manipulación de datos.  
+- **Openpyxl:** Exportación a Excel.  
+
+---
+
+#### **7. Limitaciones y Mejoras Potenciales**  
+- **Limitaciones:**  
+  - Dependencia de la calidad del prompt para resultados precisos.  
+  - Costo/tiempo de inferencia con modelos grandes.  
+- **Mejoras:**  
+  - Cachear respuestas de IA para fechas/títulos recurrentes.  
+  - Añadir validación manual de resultados.  
+
+🔍 **Conclusión:** La app combina reglas de normalización con IA para resolver ambigüedades, ofreciendo una solución híbrida eficiente para metadatos históricos.
