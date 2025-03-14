@@ -10,12 +10,14 @@ Created on Fri Mar 14 11:46:15 2025
 App de Streamlit para Conversión Archivística - Versión Cloud
 """
 
-import streamlit as st
-import pandas as pd
-import os
-import io
-import tempfile
-from ira_atom_v2 import ISADConverter
+import streamlit as st  # Framework principal
+import pandas as pd     # Manipulación de datos
+import os               # Manejo de sistema de archivos
+import io               # Manejo de buffers de memoria
+import tempfile         # Directorios temporales
+from ira_atom_v2 import ISADConverter  # Lógica de conversión
+from langchain_huggingface import HuggingFaceEndpoint
+from langchain.schema import HumanMessage
 
 # Configuración inicial
 st.set_page_config(
